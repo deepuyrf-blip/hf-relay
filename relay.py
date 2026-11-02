@@ -19,6 +19,8 @@ Env:
 
 Stop anytime:  systemctl stop hf-relay
 """
+from __future__ import annotations
+
 import json
 import os
 import subprocess
