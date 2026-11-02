@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the HF relay agent on this machine as a systemd service.
+# Install the HF relay agent as a systemd service. Needs no pip — only `requests`.
 #   RELAY_REPO=you/vps-relay HF_TOKEN=hf_xxx ./setup-relay.sh
 set -e
 REPO="${RELAY_REPO:?set RELAY_REPO (e.g. yourname/vps-relay)}"
@@ -8,15 +8,21 @@ DIR="${RELAY_DIR:-/opt/hf-relay}"
 INTERVAL="${RELAY_INTERVAL:-20}"
 ALLOW="${RELAY_ALLOW:-}"
 
-echo "==> python deps"
-python3 -c "import huggingface_hub" 2>/dev/null \
-  || pip3 install --break-system-packages huggingface_hub 2>/dev/null \
-  || pip3 install huggingface_hub
+if [ "$(id -u)" != "0" ]; then
+  echo "run this as root (sudo -s), it writes to /opt and /etc"; exit 1
+fi
+
+echo "==> checking python deps"
+python3 -c "import requests" 2>/dev/null || {
+  echo "installing python3-requests"
+  apt-get update -qq && apt-get install -y --no-install-recommends python3-requests
+}
 
 echo "==> fetching relay.py"
 mkdir -p "$DIR"
 curl -fsSL -m 60 https://raw.githubusercontent.com/deepuyrf-blip/hf-relay/main/relay.py -o "$DIR/relay.py"
 chmod +x "$DIR/relay.py"
+python3 -c "import ast,sys; ast.parse(open('$DIR/relay.py').read())" && echo "relay.py OK"
 
 echo "==> writing env file (0600)"
 umask 077
@@ -51,10 +57,10 @@ UNIT
 
 systemctl daemon-reload
 systemctl enable --now hf-relay
-sleep 3
+sleep 5
 echo
 echo "==> status"
-systemctl --no-pager --lines=8 status hf-relay || true
+systemctl --no-pager --lines=6 status hf-relay || true
 echo
-echo "Logs : journalctl -u hf-relay -f     (or tail -f /var/log/hf-relay.log)"
+echo "Logs : tail -f /var/log/hf-relay.log"
 echo "Stop : systemctl stop hf-relay && systemctl disable hf-relay"
